@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Build ImmortalWrt with the official ImageBuilder for one device.
-# Usage: [WIFI_KEY=...] [WIFI_COUNTRY=GB] ./build.sh <device> <version>
+# Usage: [WIFI_KEY=...] [WIFI_COUNTRY=..] ./build.sh <device> <version>
 #        ./build.sh cm520-79f 25.12.2
 #
 # Layers, applied in order (later wins):
 #   global/packages.list -> devices/<device>/packages.list
 #   global/files/        -> devices/<device>/files/
+#   WIFI_COUNTRY (env, default AU) -> devices/<device>/device.conf
 set -euo pipefail
 
 device="${1:?usage: $0 <device> <version>}"
@@ -16,15 +17,23 @@ device_dir="${root}/devices/${device}"
 [[ -f "${device_dir}/device.conf" ]] || { echo "Unknown device: ${device} (no ${device_dir}/device.conf)" >&2; exit 1; }
 
 TARGET="" PROFILE="" WIFI_DEFAULTS=""
+WIFI_COUNTRY="${WIFI_COUNTRY:-AU}"
+WIFI_CHANNEL_2G="" WIFI_CHANNEL_5G="" WIFI_HTMODE_2G="" WIFI_HTMODE_5G=""
 # shellcheck source=/dev/null
 source "${device_dir}/device.conf"
 [[ -n "${TARGET}" && -n "${PROFILE}" ]] || { echo "${device}/device.conf must set TARGET and PROFILE" >&2; exit 1; }
 
 if [[ "${WIFI_DEFAULTS}" == "y" ]]; then
-    wifi_key="${WIFI_KEY:?WIFI_KEY is required for ${device}: ImmortalWrt otherwise ships an open, enabled AP}"
-    wifi_country="${WIFI_COUNTRY:-GB}"
+    wifi_key="${WIFI_KEY:-mywrtwifi}"
     [[ "${#wifi_key}" -ge 8 && "${#wifi_key}" -le 63 && "${wifi_key}" != *"'"* ]] ||
         { echo "WIFI_KEY must be 8-63 chars without single quotes" >&2; exit 1; }
+    [[ "${WIFI_COUNTRY}" =~ ^[A-Z]{2}$ ]] || { echo "WIFI_COUNTRY must be two uppercase letters" >&2; exit 1; }
+    for v in WIFI_CHANNEL_2G WIFI_CHANNEL_5G; do
+        [[ "${!v}" =~ ^([0-9]+)?$ ]] || { echo "${v} must be a channel number" >&2; exit 1; }
+    done
+    for v in WIFI_HTMODE_2G WIFI_HTMODE_5G; do
+        [[ "${!v}" =~ ^([A-Z]+[0-9]*)?$ ]] || { echo "${v} must look like HT20 or VHT80" >&2; exit 1; }
+    done
 fi
 
 # Merge package layers: 'pkg' adds, '-pkg' removes; the last mention of a name wins.
@@ -120,12 +129,42 @@ if [[ "${WIFI_DEFAULTS}" == "y" ]]; then
 #!/bin/sh
 . /lib/functions/uci-defaults.sh
 board_config_update
-ucidef_set_country '${wifi_country}'
+ucidef_set_country '${WIFI_COUNTRY}'
 ucidef_set_wireless all 'MyWRT' 'sae-mixed' '${wifi_key}'
 board_config_flush
 exit 0
 EOF
     chmod 0755 files/etc/board.d/99-mywrt-wireless
+
+    # board.json has no channel/htmode defaults, so set them once per radio right after
+    # 10-wifi-detect creates it; the marker keeps later boots and user changes untouched.
+    if [[ -n "${WIFI_CHANNEL_2G}${WIFI_CHANNEL_5G}${WIFI_HTMODE_2G}${WIFI_HTMODE_5G}" ]]; then
+        mkdir -p files/etc/hotplug.d/ieee80211
+        cat >files/etc/hotplug.d/ieee80211/20-mywrt-radio <<EOF
+#!/bin/sh
+[ "\${ACTION}" = "add" ] || exit 0
+[ -f /etc/backup/installed_packages.txt ] && exit 0
+
+changed=0
+for radio in \$(uci -q show wireless | sed -n 's/^wireless\.\([^.]*\)=wifi-device\$/\1/p'); do
+    [ -n "\$(uci -q get "wireless.\${radio}.mywrt_defaults")" ] && continue
+    case "\$(uci -q get "wireless.\${radio}.band")" in
+        2g) channel='${WIFI_CHANNEL_2G}' htmode='${WIFI_HTMODE_2G}' ;;
+        5g) channel='${WIFI_CHANNEL_5G}' htmode='${WIFI_HTMODE_5G}' ;;
+        *) continue ;;
+    esac
+    [ -n "\${channel}" ] && uci -q set "wireless.\${radio}.channel=\${channel}"
+    [ -n "\${htmode}" ] && uci -q set "wireless.\${radio}.htmode=\${htmode}"
+    uci -q set "wireless.\${radio}.mywrt_defaults=1"
+    changed=1
+done
+
+[ "\${changed}" = "1" ] || exit 0
+uci -q commit wireless
+wifi reload
+EOF
+        chmod 0755 files/etc/hotplug.d/ieee80211/20-mywrt-radio
+    fi
 fi
 
 packages="$(merge_packages "${root}/global/packages.list" "${device_dir}/packages.list")"
