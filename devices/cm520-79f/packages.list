@@ -4,7 +4,20 @@
 luci-app-sqm luci-i18n-sqm-zh-cn
 luci-app-upnp luci-i18n-upnp-zh-cn
 luci-proto-wireguard
+luci-app-turboacc luci-i18n-turboacc-zh-cn
+luci-app-nlbwmon luci-i18n-nlbwmon-zh-cn
+luci-app-wol luci-i18n-wol-zh-cn
+luci-app-watchcat luci-i18n-watchcat-zh-cn
+luci-mod-dashboard luci-i18n-dashboard-zh-cn
+luci-app-vlmcsd luci-i18n-vlmcsd-zh-cn
 
-# Optional, uncomment when needed
-# tailscale luci-app-tailscale-community luci-i18n-tailscale-community-zh-cn
-# luci-app-ddns-go luci-i18n-ddns-go-zh-cn
+# Mesh VPN UI only; the easytier binary is downloaded from LuCI when needed.
+luci-app-easytier luci-i18n-easytier-zh-cn
+
+# Proxy UIs without cores (Clash, Xray, sing-box are installed later).
+# Kernel modules are their build-time selects, which the feed packages do not depend on.
+luci-app-openclash kmod-inet-diag kmod-nft-tproxy
+luci-app-passwall2 luci-i18n-passwall2-zh-cn kmod-nft-socket kmod-nft-nat
+
+# Monitoring
+luci-app-wechatpush luci-i18n-wechatpush-zh-cn
