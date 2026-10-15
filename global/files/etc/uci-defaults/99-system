@@ -1,0 +1,35 @@
+#!/bin/sh
+
+# Base system identity: hostname and log buffer size.
+# These defaults are packaged into every image, so they can run after sysupgrade too.
+[ -f /etc/backup/installed_packages.txt ] && exit 0
+
+# Derive a stable per-device suffix from the first real ethernet MAC, so several
+# boxes on the same LAN do not all announce themselves as the same host.
+mac_suffix=""
+for net_path in /sys/class/net/eth0 /sys/class/net/eth1 /sys/class/net/br-lan; do
+    [ -f "${net_path}/address" ] || continue
+
+    mac_address="$(cat "${net_path}/address" 2>/dev/null)"
+    case "${mac_address}" in
+        ""|00:00:00:00:00:00) continue ;;
+    esac
+
+    mac_suffix="$(echo "${mac_address}" | tr -d ':' | tr 'a-z' 'A-Z' | sed -n 's/.*\(....\)$/\1/p')"
+    [ -n "${mac_suffix}" ] && break
+done
+
+if [ -n "${mac_suffix}" ]; then
+    uci -q set system.@system[0].hostname="MyWRT-${mac_suffix}"
+else
+    uci -q set system.@system[0].hostname='MyWRT'
+fi
+
+# Timezone is left to default-settings-chn (Asia/Shanghai, CST-8).
+
+# The stock 16 KiB ring buffer wraps long before a boot-time problem can be read.
+uci -q set system.@system[0].log_size='128'
+
+uci -q commit system
+
+exit 0

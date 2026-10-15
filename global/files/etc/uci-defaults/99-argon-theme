@@ -1,0 +1,13 @@
+#!/bin/sh
+
+# Argon only shows files in /www/luci-static/argon/background/ when online_wallpaper
+# is 'none'; luci-app-argon-config ships 'bing', which would hide custom.jpg.
+# These defaults are packaged into every image, so they can run after sysupgrade too.
+[ -f /etc/backup/installed_packages.txt ] && exit 0
+
+uci -q get argon.@global[0] >/dev/null || exit 0
+
+uci -q set argon.@global[0].online_wallpaper='none'
+uci -q commit argon
+
+exit 0

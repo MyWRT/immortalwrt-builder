@@ -1,0 +1,41 @@
+#!/bin/sh
+
+# Enable the NTP client and point it at privacy-respecting, publicly operated
+# time servers instead of the vendor/ISP defaults.
+# These defaults are packaged into every image, so they can run after sysupgrade too.
+[ -f /etc/backup/installed_packages.txt ] && exit 0
+
+# Creates the section on a fresh config, no-op when it already exists.
+uci -q set system.ntp='timeserver'
+
+uci -q set system.ntp.enabled='1'
+# Client only: never answer NTP queries, so the router cannot be used as an
+# amplification/reflection relay.
+uci -q set system.ntp.enable_server='0'
+# Ignore time servers advertised by the upstream DHCP server, so the list below
+# stays authoritative.
+uci -q set system.ntp.use_dhcp='0'
+
+# Runs after 99-default-settings-chinese (alphabetical), so this list replaces its
+# Tencent/Aliyun set. busybox ntpd polls every peer in parallel and picks the best
+# one; China-side peers come first, the overseas ones are fallbacks.
+uci -q delete system.ntp.server
+for ntp_server in \
+    ntp.ntsc.ac.cn \
+    ntp.sjtu.edu.cn \
+    cn.pool.ntp.org \
+    time.cloudflare.com \
+    ptbtime1.ptb.de \
+    ptbtime2.ptb.de \
+    nts.netnod.se; do
+    uci -q add_list system.ntp.server="${ntp_server}"
+done
+
+uci -q commit system
+
+if [ -x /etc/init.d/sysntpd ]; then
+    /etc/init.d/sysntpd enable 2>/dev/null
+    /etc/init.d/sysntpd running 2>/dev/null && /etc/init.d/sysntpd restart
+fi
+
+exit 0

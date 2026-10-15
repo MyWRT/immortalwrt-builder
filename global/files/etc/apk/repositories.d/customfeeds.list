@@ -1,0 +1,6 @@
+# Custom feeds for APK releases (25.12+): one URL ending in /packages.adb per line.
+# build.sh expands the variables below in this file and prepends its active lines to the
+# ImageBuilder's repositories, so the image ships them and the build can install from them.
+#   ${PACKAGES_ARCH}  ${OPENWRT_VERSION}  ${BIG_VERSION}  ${DISTRIB_ARCH}  ${DISTRIB_RELEASE}
+# Signing key: /etc/apk/keys/mywrt-25.12.pem
+https://mywrt.awayfrom.cn/packages-${BIG_VERSION}/${PACKAGES_ARCH}/mywrt/packages.adb

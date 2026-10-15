@@ -1,0 +1,89 @@
+name: Build ImmortalWrt
+
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: "Device (directory under devices/), or all"
+        type: choice
+        default: "all"
+        options:
+          - all
+          - cm520-79f
+      version:
+        description: "ImmortalWrt release"
+        type: choice
+        default: "25.12.2"
+        options:
+          - "25.12.2"
+          - "24.10.6"
+
+jobs:
+  devices:
+    runs-on: ubuntu-24.04
+    outputs:
+      list: ${{ steps.list.outputs.list }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve device list
+        id: list
+        env:
+          DEVICE: ${{ inputs.device }}
+        run: |
+          if [[ "${DEVICE}" == "all" ]]; then
+            list="$(printf '%s\n' devices/*/device.conf | cut -d/ -f2 | jq -Rnc '[inputs]')"
+          else
+            [[ -f "devices/${DEVICE}/device.conf" ]] || { echo "Unknown device: ${DEVICE}"; exit 1; }
+            list="$(jq -nc --arg d "${DEVICE}" '[$d]')"
+          fi
+          echo "list=${list}" >> "${GITHUB_OUTPUT}"
+
+  build:
+    needs: devices
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        device: ${{ fromJSON(needs.devices.outputs.list) }}
+    env:
+      WIFI_KEY: ${{ secrets.WIFI_KEY }}
+      WIFI_COUNTRY: ${{ vars.WIFI_COUNTRY || 'GB' }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read device target
+        id: target
+        run: |
+          source "devices/${{ matrix.device }}/device.conf"
+          echo "slug=${TARGET//\//-}" >> "${GITHUB_OUTPUT}"
+
+      - name: Install ImageBuilder dependencies
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y build-essential file gawk gettext libncurses-dev \
+            python3 rsync unzip wget zstd xsltproc
+
+      - name: Cache ImageBuilder archive
+        uses: actions/cache@v4
+        with:
+          path: work/dl/*.tar.zst
+          key: imagebuilder-${{ steps.target.outputs.slug }}-${{ inputs.version }}
+
+      - name: Build
+        run: ./build.sh "${{ matrix.device }}" "${{ inputs.version }}"
+
+      # Artifact, not Release: images with WIFI_DEFAULTS=y embed WIFI_KEY.
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: immortalwrt-${{ inputs.version }}-${{ matrix.device }}
+          path: |
+            output/${{ matrix.device }}/*.bin
+            output/${{ matrix.device }}/*.ubi
+            output/${{ matrix.device }}/*.img.gz
+            output/${{ matrix.device }}/*.itb
+            output/${{ matrix.device }}/*.manifest
+            output/${{ matrix.device }}/sha256sums
+          if-no-files-found: error

@@ -1,0 +1,20 @@
+# Global packages, applied to every device before devices/<name>/packages.list.
+# One or more names per line, '#' starts a comment.
+#   pkg   install
+#   -pkg  remove (also removes a profile default); a later layer overrides an earlier one.
+
+# China defaults (Asia/Shanghai, CN NTP, apk mirror). Already an ImmortalWrt profile
+# default; listed so it stays even if a device's profile lacks it.
+default-settings-chn
+luci-i18n-base-zh-cn
+luci-i18n-firewall-zh-cn
+luci-i18n-package-manager-zh-cn
+
+# Admin
+luci-app-ttyd luci-i18n-ttyd-zh-cn
+openssh-sftp-server
+
+# Themes. shadcn comes from the mywrt feed; 99-luci makes it the default.
+luci-theme-shadcn
+luci-theme-argon
+luci-app-argon-config luci-i18n-argon-config-zh-cn

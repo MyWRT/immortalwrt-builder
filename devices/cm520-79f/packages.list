@@ -1,0 +1,10 @@
+# MobiPromo CM520-79F packages, applied after global/packages.list (same syntax).
+
+# Router features
+luci-app-sqm luci-i18n-sqm-zh-cn
+luci-app-upnp luci-i18n-upnp-zh-cn
+luci-proto-wireguard
+
+# Optional, uncomment when needed
+# tailscale luci-app-tailscale-community luci-i18n-tailscale-community-zh-cn
+# luci-app-ddns-go luci-i18n-ddns-go-zh-cn

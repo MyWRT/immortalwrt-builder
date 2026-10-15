@@ -1,0 +1,16 @@
+#!/bin/sh
+
+# Bind SSH to the LAN bridge only, so dropbear never listens on a WAN address.
+# These defaults are packaged into every image, so they can run after sysupgrade too.
+[ -f /etc/backup/installed_packages.txt ] && exit 0
+
+uci -q get dropbear.@dropbear[0] >/dev/null || exit 0
+
+uci -q set dropbear.@dropbear[0].Interface='lan'
+uci -q commit dropbear
+
+if [ -x /etc/init.d/dropbear ]; then
+    /etc/init.d/dropbear running 2>/dev/null && /etc/init.d/dropbear restart
+fi
+
+exit 0
