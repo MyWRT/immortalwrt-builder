@@ -88,10 +88,12 @@ done
 
 # Feed format of this ImageBuilder.
 if grep -q '^CONFIG_USE_APK=y' imagebuilder/.config; then
+    pkg_manager="apk"
     feeds_file="files/etc/apk/repositories.d/customfeeds.list"
     keys_src="files/etc/apk/keys"
     repos_file="imagebuilder/repositories"
 else
+    pkg_manager="opkg"
     feeds_file="files/etc/opkg/customfeeds.conf"
     keys_src="files/etc/opkg/keys"
     repos_file="imagebuilder/repositories.conf"
@@ -176,5 +178,21 @@ make -C imagebuilder image \
     PACKAGES="${packages}" \
     FILES="${work}/files" \
     BIN_DIR="${out}"
+
+# Resolved settings for release-notes.sh; the Wi-Fi key itself stays out.
+cat >"${work}/build.env" <<EOF
+DEVICE='${device}'
+VERSION='${version}'
+TARGET='${TARGET}'
+PROFILE='${PROFILE}'
+PKG_MANAGER='${pkg_manager}'
+WIFI_DEFAULTS='${WIFI_DEFAULTS}'
+WIFI_KEY_CUSTOM='$([[ -n "${WIFI_KEY:-}" ]] && echo y)'
+WIFI_COUNTRY='${WIFI_COUNTRY}'
+WIFI_CHANNEL_2G='${WIFI_CHANNEL_2G}'
+WIFI_HTMODE_2G='${WIFI_HTMODE_2G}'
+WIFI_CHANNEL_5G='${WIFI_CHANNEL_5G}'
+WIFI_HTMODE_5G='${WIFI_HTMODE_5G}'
+EOF
 
 ls -lh "${out}"

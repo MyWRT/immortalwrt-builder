@@ -17,6 +17,10 @@ on:
         options:
           - "25.12.2"
           - "24.10.6"
+      release:
+        description: "Publish to GitHub Releases (otherwise upload a workflow artifact)"
+        type: boolean
+        default: true
 
 jobs:
   devices:
@@ -42,6 +46,8 @@ jobs:
   build:
     needs: devices
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -74,16 +80,46 @@ jobs:
       - name: Build
         run: ./build.sh "${{ matrix.device }}" "${{ inputs.version }}"
 
-      # Artifact, not Release: images with WIFI_DEFAULTS=y embed WIFI_KEY.
-      - name: Upload firmware
+      - name: Stage release files
+        id: stage
+        env:
+          DEVICE: ${{ matrix.device }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          shopt -s nullglob
+          dir="release/${DEVICE}"
+          mkdir -p "${dir}"
+          files=(output/"${DEVICE}"/*.{bin,ubi,itb,manifest} output/"${DEVICE}"/*.img.gz)
+          (( ${#files[@]} > 0 )) || { echo "No firmware files in output/${DEVICE}"; exit 1; }
+          cp "${files[@]}" "${dir}/"
+          (cd "${dir}" && sha256sum -b -- * > sha256sums)
+          ./release-notes.sh "${DEVICE}" "${dir}" > "release/${DEVICE}.md"
+          month="$(date -u +%Y.%m)"
+          model="$(jq -r '.profiles[].titles[0] | [.vendor, .model] | map(select(. != null)) | join(" ")' "output/${DEVICE}/profiles.json")"
+          {
+            echo "dir=${dir}"
+            echo "tag=ImmortalWrt_${DEVICE}_${VERSION}_${month}"
+            echo "name=${model} · ImmortalWrt ${VERSION} · ${month}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Upload to Release
+        if: ${{ inputs.release }}
+        uses: ophub/upload-to-releases@main
+        with:
+          tag: ${{ steps.stage.outputs.tag }}
+          name: ${{ steps.stage.outputs.name }}
+          artifacts: ${{ steps.stage.outputs.dir }}/*
+          body_file: release/${{ matrix.device }}.md
+          allow_updates: true
+          remove_artifacts: false
+          replaces_artifacts: true
+          make_latest: true
+          gh_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload workflow artifact
+        if: ${{ !inputs.release }}
         uses: actions/upload-artifact@v4
         with:
           name: immortalwrt-${{ inputs.version }}-${{ matrix.device }}
-          path: |
-            output/${{ matrix.device }}/*.bin
-            output/${{ matrix.device }}/*.ubi
-            output/${{ matrix.device }}/*.img.gz
-            output/${{ matrix.device }}/*.itb
-            output/${{ matrix.device }}/*.manifest
-            output/${{ matrix.device }}/sha256sums
+          path: ${{ steps.stage.outputs.dir }}
           if-no-files-found: error
